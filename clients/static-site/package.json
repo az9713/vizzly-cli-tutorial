@@ -1,0 +1,81 @@
+{
+  "name": "@vizzly-testing/static-site",
+  "version": "0.2.0",
+  "description": "Static site generator plugin for Vizzly - seamlessly integrate static sites (Gatsby, Astro, Jekyll, Next.js) into your visual development workflow",
+  "keywords": [
+    "vizzly",
+    "static-site",
+    "gatsby",
+    "astro",
+    "jekyll",
+    "nextjs",
+    "visual-testing",
+    "screenshot-testing",
+    "visual-regression",
+    "plugin"
+  ],
+  "homepage": "https://vizzly.dev",
+  "bugs": "https://github.com/vizzly-testing/cli/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vizzly-testing/cli.git",
+    "directory": "clients/static-site"
+  },
+  "license": "MIT",
+  "author": "Stubborn Mule Software <support@vizzly.dev>",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "vizzlyPlugin": "./dist/plugin.js",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "npm run clean && npm run compile",
+    "clean": "rimraf dist",
+    "compile": "babel src --out-dir dist --ignore '**/*.test.js'",
+    "prepublishOnly": "npm run lint && npm run build",
+    "test": "node --test --test-reporter=spec $(find tests -name '*.test.js' ! -name 'sdk-integration.test.js')",
+    "test:sdk-integration": "VIZZLY_E2E=1 node --test --test-reporter=spec tests/sdk-integration.test.js",
+    "test:e2e": "../../bin/vizzly.js static-site ../../test-site",
+    "test:watch": "node --test --test-reporter=spec --watch $(find tests -name '*.test.js')",
+    "lint": "biome lint src",
+    "lint:fix": "biome lint --write src",
+    "format": "biome format --write src",
+    "format:check": "biome format src",
+    "check": "biome check src",
+    "check:fix": "biome check --write src"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "peerDependencies": {
+    "@vizzly-testing/cli": ">=0.24.0"
+  },
+  "dependencies": {
+    "cosmiconfig": "^9.0.0",
+    "fast-xml-parser": "^5.8.0",
+    "playwright-core": "^1.50.0",
+    "serve-handler": "^6.1.5",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.28.0",
+    "@babel/core": "^7.23.6",
+    "@babel/preset-env": "^7.23.6",
+    "@biomejs/biome": "^2.3.8",
+    "rimraf": "^6.0.1"
+  }
+}

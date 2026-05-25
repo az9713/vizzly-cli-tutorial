@@ -1,0 +1,385 @@
+@import 'tailwindcss';
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import '../../../node_modules/@vizzly-testing/observatory/src/styles.css';
+@source "../../../node_modules/@vizzly-testing/observatory/src";
+
+/* ============================================
+   VIZZLY REPORTER - LOCAL STYLES
+   Styles specific to the reporter that extend Observatory
+   ============================================ */
+
+.code-token--keyword {
+  color: #c792ea;
+  font-weight: 500;
+}
+
+.code-token--string {
+  color: #c3e88d;
+}
+
+.code-token--comment {
+  color: #64748b;
+  font-style: italic;
+}
+
+.code-token--number {
+  color: #f78c6c;
+}
+
+.code-token--function {
+  color: #82aaff;
+}
+
+.code-token--command {
+  color: #f59e0b;
+}
+
+/* ============================================
+   BASE STYLES
+   ============================================ */
+
+body {
+  background-color: var(--vz-bg);
+  color: var(--text-primary);
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+/* Mobile-first utilities */
+.touch-manipulation {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Safe area insets for mobile devices with notches */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0);
+}
+
+/* Hide scrollbar but allow scroll */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Horizontal scroll with snap for mobile */
+.scroll-snap-x {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+.scroll-snap-item {
+  scroll-snap-align: start;
+}
+
+/* ============================================
+   ANIMATIONS (reporter-specific)
+   ============================================ */
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0.8;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes dropdown-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.animate-slide-down {
+  animation: slide-down 0.2s ease-out;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.25s ease-out;
+}
+
+.animate-dropdown {
+  animation: dropdown-enter 0.15s ease-out;
+}
+
+.animate-delay-100 {
+  animation-delay: 0.1s;
+}
+.animate-delay-200 {
+  animation-delay: 0.2s;
+}
+.animate-delay-300 {
+  animation-delay: 0.3s;
+}
+.animate-delay-400 {
+  animation-delay: 0.4s;
+}
+
+/* ============================================
+   TIMELINE STRIP
+   ============================================ */
+
+.timeline-strip {
+  display: flex;
+  gap: 4px;
+  padding: 8px 0;
+}
+
+.timeline-item {
+  position: relative;
+  width: 6px;
+  height: 32px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.timeline-item:hover {
+  transform: scaleY(1.15);
+}
+
+.timeline-item--approved {
+  background: var(--accent-success);
+  opacity: 0.8;
+}
+
+.timeline-item--approved:hover {
+  opacity: 1;
+}
+
+.timeline-item--pending {
+  background: var(--accent-warning);
+  opacity: 0.8;
+}
+
+.timeline-item--pending:hover {
+  opacity: 1;
+}
+
+.timeline-item--rejected {
+  background: var(--accent-danger);
+  opacity: 0.8;
+}
+
+.timeline-item--rejected:hover {
+  opacity: 1;
+}
+
+.timeline-item--processing {
+  background: var(--accent-info);
+  animation: pulse-soft 2s infinite;
+}
+
+/* ============================================
+   STAT PILLS / BADGES (reporter-specific variants)
+   ============================================ */
+
+.stat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.stat-pill--success {
+  background: var(--accent-success-muted);
+  color: var(--accent-success);
+}
+
+.stat-pill--warning {
+  background: var(--accent-warning-muted);
+  color: var(--accent-warning);
+}
+
+.stat-pill--danger {
+  background: var(--accent-danger-muted);
+  color: var(--accent-danger);
+}
+
+.stat-pill--info {
+  background: var(--accent-info-muted);
+  color: var(--accent-info);
+}
+
+.stat-pill--muted {
+  background: rgba(107, 114, 128, 0.15);
+  color: var(--text-secondary);
+}
+
+.stat-pill--purple {
+  background: var(--accent-purple-muted);
+  color: var(--accent-purple);
+}
+
+/* ============================================
+   TABLE STYLES (reporter-specific)
+   ============================================ */
+
+.vz-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.vz-table thead th {
+  padding: 12px 16px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid var(--vz-border-subtle);
+  text-align: left;
+}
+
+.vz-table tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.vz-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.vz-table tbody td {
+  padding: 14px 16px;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--vz-border-subtle);
+}
+
+.vz-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ============================================
+   COMPARISON VIEWER STYLES (legacy - may be removable)
+   ============================================ */
+
+.comparison-viewer {
+  @apply relative flex justify-center;
+}
+
+/* Filmstrip scroll behavior */
+.filmstrip-scroll {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Unified screenshot container */
+.unified-screenshot-container {
+  transition: transform 0.15s ease-out;
+}
+
+/* Glass header for comparison viewer */
+.glass-header {
+  background: rgba(30, 41, 59, 0.95);
+  backdrop-filter: blur(12px);
+}
+
+/* ============================================
+   FORM SECTION STYLES
+   ============================================ */
+
+.vz-form-section {
+  @apply space-y-6;
+}
+
+.vz-form-section__header {
+  @apply mb-6;
+}
+
+.vz-form-section__title {
+  @apply text-lg font-semibold text-white;
+}
+
+.vz-form-section__description {
+  @apply text-sm text-slate-400 mt-1;
+}
+
+.vz-form-group {
+  @apply space-y-4;
+}
+
+.vz-form-actions {
+  @apply flex items-center justify-end gap-3 pt-4 border-t border-slate-700/50;
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
+.font-mono {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Focus visible for accessibility */
+.focus-ring {
+  @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900;
+}

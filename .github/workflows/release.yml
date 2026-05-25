@@ -1,0 +1,123 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version bump type, or current to publish the package.json version'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - current
+          - patch
+          - minor
+          - major
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Upgrade npm for Trusted Publishers
+        run: npm install -g npm@11.5.1
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Configure git
+        run: |
+          git config --local user.email "${{ secrets.GIT_USER_EMAIL }}"
+          git config --local user.name "${{ secrets.GIT_USER_NAME }}"
+
+      - name: Bump version
+        id: version
+        run: |
+          if [ "${{ github.event.inputs.version_type }}" != "current" ]; then
+            npm version ${{ github.event.inputs.version_type }} --no-git-tag-version
+          fi
+
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          NEW_VERSION="v$PACKAGE_VERSION"
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "package_version=$PACKAGE_VERSION" >> $GITHUB_OUTPUT
+
+          if [ "${{ github.event.inputs.version_type }}" != "current" ]; then
+            git add package.json package-lock.json
+            git commit -m "🔖 v$PACKAGE_VERSION"
+          fi
+
+      - name: Get previous published version
+        id: prev_version
+        run: |
+          PUBLISHED_VERSION=$(npm view @vizzly-testing/cli version 2>/dev/null || echo "")
+          if [ -n "$PUBLISHED_VERSION" ] && git rev-parse "v$PUBLISHED_VERSION" >/dev/null 2>&1; then
+            PREV_TAG="v$PUBLISHED_VERSION"
+          else
+            PREV_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+          fi
+          echo "tag=$PREV_TAG" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          if [ -n "${{ steps.prev_version.outputs.tag }}" ]; then
+            COMMITS=$(git log ${{ steps.prev_version.outputs.tag }}..HEAD --pretty=format:"- %s")
+            CHANGELOG_URL="https://github.com/vizzly-testing/cli/compare/${{ steps.prev_version.outputs.tag }}...${{ steps.version.outputs.new_version }}"
+          else
+            COMMITS=$(git log --pretty=format:"- %s" -10)
+            CHANGELOG_URL="https://github.com/vizzly-testing/cli/releases/tag/${{ steps.version.outputs.new_version }}"
+          fi
+
+          {
+            echo 'notes<<RELEASE_EOF'
+            echo "## What's Changed"
+            echo
+            echo "$COMMITS"
+            echo
+            echo "**Full Changelog**: $CHANGELOG_URL"
+            echo 'RELEASE_EOF'
+          } >> $GITHUB_OUTPUT
+
+      - name: Verify package version is unpublished
+        run: |
+          if npm view @vizzly-testing/cli@${{ steps.version.outputs.package_version }} version >/dev/null 2>&1; then
+            echo "@vizzly-testing/cli@${{ steps.version.outputs.package_version }} is already published"
+            exit 1
+          fi
+
+      - name: Publish to NPM
+        run: npm publish --provenance --access public
+
+      - name: Push version and tag
+        run: |
+          git push origin main
+          git tag "${{ steps.version.outputs.new_version }}"
+          git push origin "${{ steps.version.outputs.new_version }}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          tag_name: ${{ steps.version.outputs.new_version }}
+          name: ✨ ${{ steps.version.outputs.new_version }}
+          body: ${{ steps.release_notes.outputs.notes }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

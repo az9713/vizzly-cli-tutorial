@@ -1,0 +1,195 @@
+name: Release Ruby Client
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@97ecb7b512899eb71ab1bf2310a624c6f1589ac6 # v1
+        with:
+          ruby-version: '3.3'
+
+      - name: Configure git
+        run: |
+          git config --local user.email "${{ secrets.GIT_USER_EMAIL }}"
+          git config --local user.name "${{ secrets.GIT_USER_NAME }}"
+
+      - name: Get current version
+        id: current_version
+        working-directory: ./clients/ruby
+        run: |
+          CURRENT_VERSION=$(ruby -e "puts Gem::Specification.load('vizzly.gemspec').version")
+          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Calculate new version
+        id: new_version
+        run: |
+          CURRENT="${{ steps.current_version.outputs.version }}"
+
+          # Validate version format (X.Y.Z)
+          if ! [[ "$CURRENT" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: Invalid version format '$CURRENT'. Expected X.Y.Z"
+            exit 1
+          fi
+
+          IFS='.' read -r -a parts <<< "$CURRENT"
+
+          case "${{ github.event.inputs.version_type }}" in
+            major)
+              NEW_VERSION="$((parts[0] + 1)).0.0"
+              ;;
+            minor)
+              NEW_VERSION="${parts[0]}.$((parts[1] + 1)).0"
+              ;;
+            patch)
+              NEW_VERSION="${parts[0]}.${parts[1]}.$((parts[2] + 1))"
+              ;;
+          esac
+
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "tag=ruby/v$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog
+        uses: openai/codex-action@a26d2d4d8b78a694338b8e3715c3630254340b2c # v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          sandbox: workspace-write
+          safety-strategy: drop-sudo
+          prompt: |
+            Generate release notes for the Vizzly Ruby Client SDK v${{ steps.new_version.outputs.version }}.
+
+            Context:
+            - Client location: `clients/ruby/`
+            - Previous tag: `ruby/v${{ steps.current_version.outputs.version }}`
+            - New version: `${{ steps.new_version.outputs.version }}`
+            - This is a monorepo with multiple clients and a CLI.
+
+            Instructions:
+            1. Use git commands to inspect commits and changed files since the previous Ruby tag.
+            2. Analyze which changes are relevant to `clients/ruby/`.
+            3. Read relevant code changes when commit messages are not enough.
+            4. Generate user-friendly release notes with categories: Added, Changed, Fixed.
+            5. Focus on user-facing changes only.
+            6. If there are no relevant changes, output: "No changes to Ruby client in this release".
+            7. Save the changelog to `clients/ruby/CHANGELOG-RELEASE.md`.
+
+            Use this format:
+
+            ## What's Changed
+
+            ### Added
+            - New features
+
+            ### Changed
+            - Breaking or notable changes
+
+            ### Fixed
+            - Bug fixes
+
+            **Full Changelog**: https://github.com/vizzly-testing/vizzly-cli/compare/ruby/v${{ steps.current_version.outputs.version }}...ruby/v${{ steps.new_version.outputs.version }}
+
+      - name: Update version in gemspec
+        working-directory: ./clients/ruby
+        run: |
+          sed -i.bak "s/spec.version = '[^']*'/spec.version = '${{ steps.new_version.outputs.version }}'/" vizzly.gemspec
+          rm vizzly.gemspec.bak
+
+      - name: Update CHANGELOG.md
+        working-directory: ./clients/ruby
+        run: |
+          # Check if changelog was generated successfully
+          if [ ! -f CHANGELOG-RELEASE.md ]; then
+            echo "Warning: CHANGELOG-RELEASE.md not found, creating fallback changelog"
+            cat > CHANGELOG-RELEASE.md << 'EOF'
+          ## What's Changed
+
+          Release v${{ steps.new_version.outputs.version }}
+
+          See the full diff for detailed changes.
+          EOF
+          fi
+
+          # Prepend new release to CHANGELOG.md
+          echo -e "# Vizzly Ruby Client Changelog\n" > CHANGELOG-NEW.md
+          echo "## [${{ steps.new_version.outputs.version }}] - $(date +%Y-%m-%d)" >> CHANGELOG-NEW.md
+          echo "" >> CHANGELOG-NEW.md
+          cat CHANGELOG-RELEASE.md >> CHANGELOG-NEW.md
+          echo "" >> CHANGELOG-NEW.md
+          tail -n +2 CHANGELOG.md >> CHANGELOG-NEW.md
+          mv CHANGELOG-NEW.md CHANGELOG.md
+          rm CHANGELOG-RELEASE.md
+
+      - name: Reconfigure git auth
+        run: |
+          git config --local user.email "${{ secrets.GIT_USER_EMAIL }}"
+          git config --local user.name "${{ secrets.GIT_USER_NAME }}"
+          git config --local http.https://github.com/.extraheader "AUTHORIZATION: basic $(echo -n x-access-token:${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }} | base64)"
+
+      - name: Commit and push changes
+        run: |
+          git add clients/ruby/vizzly.gemspec clients/ruby/CHANGELOG.md
+          git commit -m "🔖 Ruby client v${{ steps.new_version.outputs.version }}"
+          git push origin main
+          git tag "${{ steps.new_version.outputs.tag }}"
+          git push origin "${{ steps.new_version.outputs.tag }}"
+
+      - name: Build gem
+        working-directory: ./clients/ruby
+        run: gem build vizzly.gemspec
+
+      - name: Publish to RubyGems
+        working-directory: ./clients/ruby
+        run: |
+          mkdir -p ~/.gem
+          echo ":rubygems_api_key: ${RUBYGEMS_API_KEY}" > ~/.gem/credentials
+          chmod 0600 ~/.gem/credentials
+          gem push vizzly-${{ steps.new_version.outputs.version }}.gem
+        env:
+          RUBYGEMS_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
+
+      - name: Read changelog for release
+        id: release_notes
+        working-directory: ./clients/ruby
+        run: |
+          # Extract just this version's changelog
+          CHANGELOG=$(sed -n '/## \[${{ steps.new_version.outputs.version }}\]/,/## \[/p' CHANGELOG.md | sed '$ d')
+          {
+            echo 'notes<<CHANGELOG_EOF'
+            echo "$CHANGELOG"
+            echo 'CHANGELOG_EOF'
+          } >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          tag_name: ${{ steps.new_version.outputs.tag }}
+          name: 💎 Ruby Client v${{ steps.new_version.outputs.version }}
+          body: ${{ steps.release_notes.outputs.notes }}
+          files: ./clients/ruby/vizzly-${{ steps.new_version.outputs.version }}.gem
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

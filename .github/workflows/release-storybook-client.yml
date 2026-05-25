@@ -1,0 +1,196 @@
+name: Release Storybook Client
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Upgrade npm for Trusted Publishers
+        run: npm install -g npm@11.5.1
+
+      - name: Configure git
+        run: |
+          git config --local user.email "${{ secrets.GIT_USER_EMAIL }}"
+          git config --local user.name "${{ secrets.GIT_USER_NAME }}"
+
+      - name: Ensure we have latest main
+        run: |
+          git fetch origin main
+          git reset --hard origin/main
+
+      - name: Get current version
+        id: current_version
+        working-directory: ./clients/storybook
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Bump version
+        id: version
+        working-directory: ./clients/storybook
+        run: |
+          NEW_VERSION=$(npm version ${{ github.event.inputs.version_type }} --no-git-tag-version | sed 's/v//')
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "tag=storybook/v$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog
+        uses: openai/codex-action@a26d2d4d8b78a694338b8e3715c3630254340b2c # v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          sandbox: workspace-write
+          safety-strategy: drop-sudo
+          prompt: |
+            Generate release notes for the Vizzly Storybook Plugin v${{ steps.version.outputs.version }}.
+
+            Context:
+            - Client location: `clients/storybook/`
+            - Previous tag: `storybook/v${{ steps.current_version.outputs.version }}`
+            - New version: `${{ steps.version.outputs.version }}`
+            - This is a monorepo with multiple clients and a CLI.
+
+            Instructions:
+            1. Use git commands to inspect commits and changed files since the previous Storybook tag.
+            2. Analyze which changes are relevant to `clients/storybook/`.
+            3. Read relevant code changes when commit messages are not enough.
+            4. Generate user-friendly release notes with categories: Added, Changed, Fixed.
+            5. Focus on user-facing changes only.
+            6. If there are no relevant changes, output: "No changes to Storybook plugin in this release".
+            7. Save the changelog to `clients/storybook/CHANGELOG-RELEASE.md`.
+
+            Use this format:
+
+            ## What's Changed
+
+            ### Added
+            - New features
+
+            ### Changed
+            - Breaking or notable changes
+
+            ### Fixed
+            - Bug fixes
+
+            **Full Changelog**: https://github.com/vizzly-testing/cli/compare/storybook/v${{ steps.current_version.outputs.version }}...storybook/v${{ steps.version.outputs.version }}
+
+      - name: Install dependencies
+        working-directory: ./clients/storybook
+        run: npm install
+
+      - name: Run tests
+        working-directory: ./clients/storybook
+        run: npm test
+
+      - name: Run linter
+        working-directory: ./clients/storybook
+        run: npm run lint
+
+      - name: Update CHANGELOG.md
+        working-directory: ./clients/storybook
+        run: |
+          # Check if changelog was generated successfully
+          if [ ! -f CHANGELOG-RELEASE.md ]; then
+            echo "Warning: CHANGELOG-RELEASE.md not found, creating fallback changelog"
+            cat > CHANGELOG-RELEASE.md << 'EOF'
+          ## What's Changed
+
+          Release v${{ steps.version.outputs.version }}
+
+          See the full diff for detailed changes.
+          EOF
+          fi
+
+          # Prepend new release to CHANGELOG.md
+          echo -e "# Changelog\n" > CHANGELOG-NEW.md
+          echo "All notable changes to this project will be documented in this file." >> CHANGELOG-NEW.md
+          echo "" >> CHANGELOG-NEW.md
+          echo "The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)," >> CHANGELOG-NEW.md
+          echo "and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)." >> CHANGELOG-NEW.md
+          echo "" >> CHANGELOG-NEW.md
+          echo "## [${{ steps.version.outputs.version }}] - $(date +%Y-%m-%d)" >> CHANGELOG-NEW.md
+          echo "" >> CHANGELOG-NEW.md
+          cat CHANGELOG-RELEASE.md >> CHANGELOG-NEW.md
+          echo "" >> CHANGELOG-NEW.md
+          tail -n +8 CHANGELOG.md >> CHANGELOG-NEW.md
+          mv CHANGELOG-NEW.md CHANGELOG.md
+          rm CHANGELOG-RELEASE.md
+
+      - name: Build package
+        working-directory: ./clients/storybook
+        run: npm run build
+
+      - name: Reconfigure git auth
+        run: |
+          git config --local user.email "${{ secrets.GIT_USER_EMAIL }}"
+          git config --local user.name "${{ secrets.GIT_USER_NAME }}"
+          git config --local http.https://github.com/.extraheader "AUTHORIZATION: basic $(echo -n x-access-token:${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }} | base64)"
+
+      - name: Commit and push changes
+        run: |
+          git add clients/storybook/package.json clients/storybook/CHANGELOG.md
+          git commit -m "🔖 Storybook plugin v${{ steps.version.outputs.version }}"
+          git push origin main
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+
+      - name: Publish to npm
+        working-directory: ./clients/storybook
+        run: |
+          # Clear any auth config to ensure OIDC Trusted Publisher flow is used
+          npm config delete //registry.npmjs.org/:_authToken 2>/dev/null || true
+          rm -f ~/.npmrc 2>/dev/null || true
+          npm config set registry https://registry.npmjs.org/
+          echo "npm version: $(npm --version)"
+          npm publish --provenance --access public
+
+      - name: Read changelog for release
+        id: release_notes
+        working-directory: ./clients/storybook
+        run: |
+          # Extract just this version's changelog
+          CHANGELOG=$(sed -n '/## \[${{ steps.version.outputs.version }}\]/,/## \[/p' CHANGELOG.md | sed '$ d')
+          {
+            echo 'notes<<CHANGELOG_EOF'
+            echo "$CHANGELOG"
+            echo 'CHANGELOG_EOF'
+          } >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: 📚 Storybook Plugin v${{ steps.version.outputs.version }}
+          body: ${{ steps.release_notes.outputs.notes }}
+          files: ./clients/storybook/*.tgz
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

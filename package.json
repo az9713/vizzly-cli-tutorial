@@ -1,0 +1,141 @@
+{
+  "name": "@vizzly-testing/cli",
+  "version": "0.32.0",
+  "description": "Visual review for agents and teams",
+  "keywords": [
+    "llm-context",
+    "visual-context",
+    "approved-baselines",
+    "visual-testing",
+    "screenshot-testing",
+    "visual-review",
+    "ui-testing",
+    "collaboration",
+    "testing",
+    "cli"
+  ],
+  "homepage": "https://vizzly.dev",
+  "bugs": "https://github.com/vizzly-testing/cli/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vizzly-testing/cli.git"
+  },
+  "license": "MIT",
+  "author": "Stubborn Mule Software <support@vizzly.dev>",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    },
+    "./client": {
+      "types": "./dist/types/client.d.ts",
+      "import": "./dist/client/index.js",
+      "require": "./dist/client/index.js"
+    },
+    "./sdk": {
+      "types": "./dist/types/sdk.d.ts",
+      "import": "./dist/sdk/index.js",
+      "require": "./dist/sdk/index.js"
+    },
+    "./config": {
+      "types": "./dist/types/config.d.ts",
+      "import": "./dist/utils/config-helpers.js",
+      "require": "./dist/utils/config-helpers.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/types/index.d.ts",
+  "bin": {
+    "vizzly": "bin/vizzly.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "cli": "source .envrc && node bin/vizzly.js",
+    "start": "node src/index.js",
+    "build": "npm run clean && npm run compile && npm run build:reporter && npm run build:reporter-ssr && npm run copy-types",
+    "clean": "rimraf dist",
+    "compile": "babel src --out-dir dist --ignore '**/*.test.js'",
+    "copy-types": "mkdir -p dist/types && cp src/types/*.d.ts dist/types/",
+    "build:reporter": "cd src/reporter && vite build",
+    "build:reporter-ssr": "cd src/reporter && vite build --config vite.ssr.config.js",
+    "dev:reporter": "cd src/reporter && vite --config vite.dev.config.js",
+    "test:types": "tsd",
+    "prepublishOnly": "npm run build",
+    "test": "node --experimental-test-coverage --test --test-concurrency=1 --test-reporter=spec $(find tests -name '*.test.js')",
+    "test:watch": "node --test --test-reporter=spec --watch $(find tests -name '*.test.js')",
+    "test:reporter": "playwright test --config=tests/reporter/playwright.config.js",
+    "test:reporter:visual": "node bin/vizzly.js run \"npm run test:reporter\"",
+    "test:swift:e2e": "npm run build && node clients/swift/scripts/run-e2e.js",
+    "test:tui": "node --test --test-reporter=spec tests/tui/*.test.js",
+    "test:tui:docker": "./tests/tui/run-tui-tests.sh",
+    "smoke:prod:pack": "node scripts/smoke-prod-pack.js",
+    "lint": "biome check src tests clients/storybook/src clients/storybook/tests clients/static-site/src clients/static-site/tests clients/vitest/src clients/vitest/tests clients/ember/src clients/ember/tests clients/ember/bin",
+    "lint:fix": "biome check --write --unsafe src tests clients/storybook/src clients/storybook/tests clients/static-site/src clients/static-site/tests clients/vitest/src clients/vitest/tests clients/ember/src clients/ember/tests clients/ember/bin",
+    "format": "biome format --write src tests clients/storybook/src clients/storybook/tests clients/static-site/src clients/static-site/tests clients/vitest/src clients/vitest/tests clients/ember/src clients/ember/tests clients/ember/bin",
+    "format:check": "biome format src tests clients/storybook/src clients/storybook/tests clients/static-site/src clients/static-site/tests clients/vitest/src clients/vitest/tests clients/ember/src clients/ember/tests clients/ember/bin",
+    "fix": "npm run format && npm run lint:fix"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "dependencies": {
+    "@vizzly-testing/honeydiff": "^0.10.3",
+    "ansis": "^4.2.0",
+    "commander": "^14.0.0",
+    "cosmiconfig": "^9.0.0",
+    "dotenv": "^17.2.1",
+    "form-data": "^4.0.0",
+    "glob": "^13.0.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "zod": "^4.1.12"
+  },
+  "tsd": {
+    "directory": "test-d",
+    "typingsFile": "src/types/index.d.ts",
+    "compilerOptions": {
+      "esModuleInterop": true,
+      "module": "ESNext",
+      "moduleResolution": "node",
+      "strict": true
+    }
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.28.0",
+    "@babel/core": "^7.23.6",
+    "@babel/preset-env": "^7.23.6",
+    "@babel/preset-react": "^7.27.1",
+    "@babel/preset-typescript": "^7.23.6",
+    "@biomejs/biome": "^2.3.8",
+    "@heroicons/react": "^2.2.0",
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "@playwright/test": "^1.55.1",
+    "@tailwindcss/postcss": "^4.1.13",
+    "@tanstack/react-query": "^5.90.11",
+    "@types/node": "^25.0.2",
+    "@vitejs/plugin-react": "^6.0.1",
+    "@vizzly-testing/observatory": "^0.3.3",
+    "autoprefixer": "^10.4.21",
+    "babel-plugin-react-compiler": "^1.0.0",
+    "babel-plugin-transform-remove-console": "^6.9.4",
+    "postcss": "^8.5.6",
+    "rimraf": "^6.0.1",
+    "tailwindcss": "^4.1.13",
+    "tsd": "^0.33.0",
+    "tui-driver": "github:vizzly-testing/tui-driver",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.0",
+    "wouter": "^3.7.1"
+  }
+}

@@ -1,0 +1,260 @@
+/**
+ * Security utilities for path sanitization and validation
+ * Protects against path traversal attacks and ensures safe file operations
+ */
+
+import { isAbsolute, join, normalize, resolve } from 'node:path';
+import * as output from './output.js';
+
+/**
+ * Sanitizes a screenshot name to prevent path traversal and ensure safe file naming
+ * @param {string} name - Original screenshot name
+ * @param {number} maxLength - Maximum allowed length (default: 255)
+ * @param {boolean} allowSlashes - Whether to allow forward slashes (for browser version strings)
+ * @returns {string} Sanitized screenshot name
+ */
+/**
+ * Validate screenshot name for security (no transformations, just validation)
+ * Throws if name contains path traversal or other dangerous patterns
+ *
+ * @param {string} name - Screenshot name to validate
+ * @param {number} maxLength - Maximum allowed length
+ * @returns {string} The original name (unchanged) if valid
+ * @throws {Error} If name contains dangerous patterns
+ */
+export function validateScreenshotName(name, maxLength = 255) {
+  if (typeof name !== 'string' || name.length === 0) {
+    throw new Error('Screenshot name must be a non-empty string');
+  }
+
+  if (name.length > maxLength) {
+    throw new Error(
+      `Screenshot name exceeds maximum length of ${maxLength} characters`
+    );
+  }
+
+  // Block directory traversal patterns
+  if (name.includes('..') || name.includes('\\')) {
+    throw new Error('Screenshot name contains invalid path characters');
+  }
+
+  // Block forward slashes (path separators)
+  if (name.includes('/')) {
+    throw new Error('Screenshot name cannot contain forward slashes');
+  }
+
+  // Block absolute paths
+  if (isAbsolute(name)) {
+    throw new Error('Screenshot name cannot be an absolute path');
+  }
+
+  // Return the original name unchanged - validation only!
+  return name;
+}
+
+/**
+ * Validate screenshot name for security (allows spaces, preserves original name)
+ *
+ * This function only validates for security - it does NOT transform spaces.
+ * Spaces are preserved so that:
+ * 1. generateScreenshotSignature() uses the original name with spaces (matches cloud)
+ * 2. generateBaselineFilename() handles space→hyphen conversion (matches cloud)
+ *
+ * Flow: "VBtn dark" → sanitize → "VBtn dark" → signature: "VBtn dark|1265||" → filename: "VBtn-dark_hash.png"
+ *
+ * @param {string} name - Screenshot name to validate
+ * @param {number} maxLength - Maximum allowed length (default: 255)
+ * @param {boolean} allowSlashes - Whether to allow forward slashes (for browser version strings)
+ * @returns {string} The validated name (unchanged if valid, spaces preserved)
+ * @throws {Error} If name contains dangerous patterns
+ *
+ * @example
+ * sanitizeScreenshotName("VBtn dark") // Returns "VBtn dark" (spaces preserved)
+ * sanitizeScreenshotName("My/Component") // Throws error (contains /)
+ */
+export function sanitizeScreenshotName(
+  name,
+  maxLength = 255,
+  allowSlashes = false
+) {
+  if (typeof name !== 'string' || name.length === 0) {
+    throw new Error('Screenshot name must be a non-empty string');
+  }
+
+  if (name.length > maxLength) {
+    throw new Error(
+      `Screenshot name exceeds maximum length of ${maxLength} characters`
+    );
+  }
+
+  // Block directory traversal patterns
+  if (name.includes('..') || name.includes('\\')) {
+    throw new Error('Screenshot name contains invalid path characters');
+  }
+
+  // Block forward slashes unless explicitly allowed (e.g., for browser version strings)
+  if (!allowSlashes && name.includes('/')) {
+    throw new Error('Screenshot name contains invalid path characters');
+  }
+
+  // Block absolute paths
+  if (isAbsolute(name)) {
+    throw new Error('Screenshot name cannot be an absolute path');
+  }
+
+  // Allow only safe characters: alphanumeric, hyphens, underscores, dots, spaces, and optionally slashes
+  // Spaces are allowed here and will be converted to hyphens in generateBaselineFilename() to match cloud behavior
+  // Replace other characters with underscores
+  const allowedChars = allowSlashes
+    ? /[^a-zA-Z0-9._ /-]/g
+    : /[^a-zA-Z0-9._ -]/g;
+  let sanitized = name.replace(allowedChars, '_');
+
+  // Prevent names that start with dots (hidden files)
+  if (sanitized.startsWith('.')) {
+    sanitized = `file_${sanitized}`;
+  }
+
+  // Ensure we have a valid filename
+  if (sanitized.length === 0 || sanitized === '.' || sanitized === '..') {
+    sanitized = 'unnamed_screenshot';
+  }
+
+  return sanitized;
+}
+
+/**
+ * Validates that a path stays within the allowed working directory bounds
+ * @param {string} targetPath - Path to validate
+ * @param {string} workingDir - Working directory that serves as the security boundary
+ * @returns {string} Resolved and normalized path if valid
+ * @throws {Error} If path is invalid or outside bounds
+ */
+export function validatePathSecurity(targetPath, workingDir) {
+  if (typeof targetPath !== 'string' || targetPath.length === 0) {
+    throw new Error('Path must be a non-empty string');
+  }
+
+  if (typeof workingDir !== 'string' || workingDir.length === 0) {
+    throw new Error('Working directory must be a non-empty string');
+  }
+
+  // Normalize and resolve both paths
+  const resolvedWorkingDir = resolve(normalize(workingDir));
+  const resolvedTargetPath = resolve(normalize(targetPath));
+
+  // Ensure the target path starts with the working directory
+  if (!resolvedTargetPath.startsWith(resolvedWorkingDir)) {
+    output.warn(
+      `Path traversal attempt blocked: ${targetPath} (resolved: ${resolvedTargetPath}) is outside working directory: ${resolvedWorkingDir}`
+    );
+    throw new Error('Path is outside the allowed working directory');
+  }
+
+  return resolvedTargetPath;
+}
+
+/**
+ * Safely constructs a path within the working directory
+ * @param {string} workingDir - Base working directory
+ * @param {...string} pathSegments - Path segments to join
+ * @returns {string} Safely constructed path
+ * @throws {Error} If resulting path would be outside working directory
+ */
+export function safePath(workingDir, ...pathSegments) {
+  if (pathSegments.length === 0) {
+    return validatePathSecurity(workingDir, workingDir);
+  }
+
+  // Sanitize each path segment
+  const sanitizedSegments = pathSegments.map(segment => {
+    if (typeof segment !== 'string') {
+      throw new Error('Path segment must be a string');
+    }
+
+    // Block directory traversal in segments
+    if (segment.includes('..')) {
+      throw new Error('Path segment contains directory traversal sequence');
+    }
+
+    return segment;
+  });
+
+  const targetPath = join(workingDir, ...sanitizedSegments);
+  return validatePathSecurity(targetPath, workingDir);
+}
+
+/**
+ * Validates screenshot properties object for safe values
+ * @param {Object} properties - Properties to validate
+ * @returns {Object} Validated properties object
+ */
+export function validateScreenshotProperties(properties = {}) {
+  if (properties === null || typeof properties !== 'object') {
+    return {};
+  }
+
+  const validated = {};
+
+  // Validate common properties with safe constraints
+  if (properties.browser && typeof properties.browser === 'string') {
+    try {
+      // Extract browser name without version (e.g., "Chrome/139.0.7258.138" -> "Chrome")
+      const browserName = properties.browser.split('/')[0];
+      validated.browser = sanitizeScreenshotName(browserName, 50);
+    } catch (error) {
+      // Skip invalid browser names, don't include them
+      output.warn(
+        `Invalid browser name '${properties.browser}': ${error.message}`
+      );
+    }
+  }
+
+  if (properties.viewport && typeof properties.viewport === 'object') {
+    const viewport = {};
+    if (
+      typeof properties.viewport.width === 'number' &&
+      properties.viewport.width > 0 &&
+      properties.viewport.width <= 10000
+    ) {
+      viewport.width = Math.floor(properties.viewport.width);
+    }
+    if (
+      typeof properties.viewport.height === 'number' &&
+      properties.viewport.height > 0 &&
+      properties.viewport.height <= 10000
+    ) {
+      viewport.height = Math.floor(properties.viewport.height);
+    }
+    if (Object.keys(viewport).length > 0) {
+      validated.viewport = viewport;
+    }
+  }
+
+  // Allow other safe string properties but sanitize them
+  for (const [key, value] of Object.entries(properties)) {
+    if (key === 'browser' || key === 'viewport') continue; // Already handled
+
+    if (
+      typeof key === 'string' &&
+      key.length <= 50 &&
+      /^[a-zA-Z0-9_-]+$/.test(key)
+    ) {
+      if (typeof value === 'string' && value.length <= 200) {
+        // Preserve safe URL/query characters like '&' in metadata values.
+        // Rendering layers should escape for HTML instead of mutating payload data here.
+        validated[key] = value.replace(/[<>"']/g, '');
+      } else if (
+        typeof value === 'number' &&
+        !Number.isNaN(value) &&
+        Number.isFinite(value)
+      ) {
+        validated[key] = value;
+      } else if (typeof value === 'boolean') {
+        validated[key] = value;
+      }
+    }
+  }
+
+  return validated;
+}
