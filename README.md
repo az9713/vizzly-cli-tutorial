@@ -2,6 +2,8 @@
 
 > **This is a tutorial fork** of the original [`vizzly-testing/cli`](https://github.com/vizzly-testing/cli), enhanced with comprehensive documentation that demystifies how Vizzly works under the hood.
 >
+> **Seen in the wild:** The video [_The 3 Levels Of AI Design... Only A Few Reach Level 2_](https://www.youtube.com/watch?v=5lycYTOYbPM) covers Vizzly for "local TDD for UI with proper diffs and metadata so you can see exactly which pixels changed instead of squinting at two screenshots side by side."
+>
 > **New to Vizzly?** Start with the tutorial docs in [`docs/`](docs/index.md):
 > - [How Vizzly works](docs/overview/what-is-vizzly.md) — the mental model (local HTTP server, auto-discovery, baselines)
 > - [Quickstart](docs/getting-started/quickstart.md) — working visual tests in under 15 minutes
